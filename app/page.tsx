@@ -1,69 +1,79 @@
-import Image from "next/image";
-import styles from "./page.module.css";
+import Link from "next/link";
+import { ApiError } from "@/lib/api";
+import { getProperties, money, type PropertyFilters } from "@/lib/properties";
+import type { Property } from "@/lib/types";
 
-export default function Home() {
+type Search = { [K in keyof PropertyFilters]?: string | string[] };
+const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+
+export default async function HomePage({ searchParams }: { searchParams: Promise<Search> }) {
+  const sp = await searchParams;
+  const filters: PropertyFilters = {
+    location: one(sp.location),
+    max_price: one(sp.max_price),
+    guests: one(sp.guests),
+    sort: one(sp.sort),
+    from: one(sp.from),
+    to: one(sp.to),
+  };
+
+  let properties: Property[] = [];
+  let filterError: string | null = null;
+  try {
+    properties = await getProperties(filters);
+  } catch (e) {
+    // invalid filters (e.g. to before from) are shown inline; anything else goes to error.tsx
+    if (e instanceof ApiError && e.status === 400) filterError = Object.values(e.details).join(". ") || e.message;
+    else throw e;
+  }
+
   return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className={styles.intro}>
-          <h1>
-            To get started, edit the{" "}
-            <code className={styles.code}>page.tsx</code> file.
-          </h1>
-          <p>
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className={styles.secondary}
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+    <>
+      <h1>Find a stay</h1>
+      <form className="card filters" action="/">
+        <label>
+          Location
+          <input name="location" defaultValue={filters.location} placeholder="Stockholm" />
+        </label>
+        <label>
+          Max price / night
+          <input name="max_price" type="number" min="1" defaultValue={filters.max_price} />
+        </label>
+        <label>
+          Guests
+          <input name="guests" type="number" min="1" defaultValue={filters.guests} />
+        </label>
+        <label>
+          Available from
+          <input name="from" type="date" defaultValue={filters.from} />
+        </label>
+        <label>
+          Available to
+          <input name="to" type="date" defaultValue={filters.to} />
+        </label>
+        <label>
+          Sort by price
+          <select name="sort" defaultValue={filters.sort ?? ""}>
+            <option value="">Newest</option>
+            <option value="price_asc">Lowest first</option>
+            <option value="price_desc">Highest first</option>
+          </select>
+        </label>
+        <button>Search</button>
+      </form>
+
+      {filterError && <p className="error" role="alert">{filterError}</p>}
+      {!filterError && properties.length === 0 && <p className="muted">No stays match your search.</p>}
+
+      <div className="grid">
+        {properties.map((p) => (
+          <Link key={p.id} href={`/properties/${p.id}`} className="card">
+            <h2>{p.title}</h2>
+            <p className="muted">{p.location} · up to {p.max_guests} guests</p>
+            <p className="price">{money(p.price_per_night)} / night</p>
+          </Link>
+        ))}
+      </div>
+    </>
   );
 }
